@@ -1,4 +1,4 @@
-# JUCE Metronome
+# JUCE Audio Player
 
 Audio player application. Simple open/play/stop interface for controlling the playback of audio files. Supports WAV, AIFF and MP3. Built using the [JUCE](https://github.com/juce-framework/JUCE) 
 audio application framework.

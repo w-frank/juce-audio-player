@@ -3,7 +3,9 @@
 //==============================================================================
 MainComponent::MainComponent() : juce::AudioAppComponent(customDeviceManager),
                                     openFileButton("Open File"), playAudioButton("Play"), 
-                                    stopAudioButton("Stop"), transportSourceState(Stopped)
+                                    stopAudioButton("Stop"), transportSourceState(Stopped),
+                                    thumbnailCache (5),
+                                    thumbnail (512, formatManager, thumbnailCache)
 {
 
     customDeviceManager.initialise(2, 2, nullptr, true);
@@ -41,6 +43,8 @@ MainComponent::MainComponent() : juce::AudioAppComponent(customDeviceManager),
     formatManager.registerBasicFormats();
     transportSource.addChangeListener(this);
 
+    thumbnail.addChangeListener(this);
+
     // Make sure you set the size of the component after
     // you add any child components.
     setSize (400, 600);
@@ -73,8 +77,10 @@ void MainComponent::openTextButtonClicked()
 
         if (reader != nullptr)
         {
+            startTimer (40);
             std::unique_ptr<juce::AudioFormatReaderSource> tempSource (new juce::AudioFormatReaderSource (reader, true));
             transportSource.setSource(tempSource.get());
+            thumbnail.setSource(new juce::FileInputSource (audioFile));
             transportSourceStateChanged(Stopped);
             playSource.reset(tempSource.release());
         }
@@ -122,6 +128,11 @@ void MainComponent::transportSourceStateChanged(transportSourceState_t state)
     }
 }
 
+void MainComponent::thumbnailChanged()
+{
+    repaint();
+}
+
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source)
 {
     if (source == &transportSource)
@@ -135,6 +146,11 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster *source)
             transportSourceStateChanged(Stopped);
         }
         
+    }
+
+    if (source == &thumbnail)
+    {
+        thumbnailChanged();
     }
 }
 
@@ -158,7 +174,45 @@ void MainComponent::paint (juce::Graphics& g)
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
 
-    // You can add your drawing code here!
+    juce::Rectangle<int> thumbnailBounds (10, 600, getWidth() - 20, getHeight() - 120);
+
+    if (thumbnail.getNumChannels() == 0)
+    {
+        paintIfNoFileLoaded (g, thumbnailBounds);
+    }
+    else
+    {
+        paintIfFileLoaded (g, thumbnailBounds);
+    }
+    
+}
+
+void MainComponent::paintIfNoFileLoaded(juce::Graphics& g, const juce::Rectangle<int>& thumbnailBounds)
+{
+    g.setColour (juce::Colours::darkgrey);
+    g.fillRect (thumbnailBounds);
+    g.setColour (juce::Colours::white);
+    g.drawFittedText ("No File Loaded", thumbnailBounds, juce::Justification::centred, 1);
+}
+
+void MainComponent::paintIfFileLoaded(juce::Graphics& g, const juce::Rectangle<int>& thumbnailBounds)
+{
+    g.setColour (juce::Colours::white);
+    g.fillRect (thumbnailBounds);
+
+    g.setColour (juce::Colours::red);
+
+    auto audioLength = (float) thumbnail.getTotalLength();
+    thumbnail.drawChannels (g, thumbnailBounds, 0.0, audioLength, 1.0f);
+
+    g.setColour(juce::Colours::black);
+
+    auto audioPosition = (float) transportSource.getCurrentPosition();
+    auto drawPosition = (audioPosition / audioLength) * (float) thumbnailBounds.getWidth()
+                            + (float) thumbnailBounds.getX();
+    g.drawLine (drawPosition, (float) thumbnailBounds.getY(), drawPosition,
+                    (float) thumbnailBounds.getBottom(), 2.0f);
+
 }
 
 void MainComponent::resized()
